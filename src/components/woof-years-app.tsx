@@ -72,7 +72,7 @@ export function WoofYearsApp() {
       toast({
         variant: "destructive",
         title: "Oh no! Something went wrong.",
-        description: "We couldn't fetch a fun fact right now. Please try again.",
+        description: error || "We couldn't fetch a fun fact right now. Please try again.",
       });
     }
   }, [error, toast]);
