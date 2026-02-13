@@ -1,6 +1,6 @@
 "use client";
 
-import { useState } from "react";
+import { useEffect } from "react";
 import { useForm } from "react-hook-form";
 import { zodResolver } from "@hookform/resolvers/zod";
 import * as z from "zod";
@@ -32,10 +32,11 @@ import {
 } from "@/components/ui/select";
 import { Skeleton } from "@/components/ui/skeleton";
 import { useToast } from "@/hooks/use-toast";
-import { convertDogAgeToHumanYears, type DogSize } from "@/lib/age-converter";
-import { generateDogFact, type DogFactOutput } from "@/ai/flows/generate-dog-fact";
+import { type DogSize } from "@/lib/age-converter";
+import { type DogFactOutput } from "@/ai/flows/generate-dog-fact";
 import { PawPrint, Sparkles, RefreshCw, Loader2 } from "lucide-react";
 import { CountUp } from "@/components/count-up";
+import { useAppStore, useAppState, useResults, useError } from "@/store/app-store";
 
 
 const formSchema = z.object({
@@ -47,16 +48,14 @@ const formSchema = z.object({
 
 type FormValues = z.infer<typeof formSchema>;
 
-type AppState = "form" | "loading" | "results";
-
-type Results = {
-    humanAge: number;
-    dogFact: DogFactOutput | null;
-}
-
 export function WoofYearsApp() {
-  const [appState, setAppState] = useState<AppState>("form");
-  const [results, setResults] = useState<Results | null>(null);
+  const appState = useAppState();
+  const results = useResults();
+  const error = useError();
+  const submitCalculation = useAppStore((state) => state.submitCalculation);
+  const reset = useAppStore((state) => state.reset);
+  const setDogAge = useAppStore((state) => state.setDogAge);
+  const setDogSize = useAppStore((state) => state.setDogSize);
 
   const { toast } = useToast();
 
@@ -67,40 +66,29 @@ export function WoofYearsApp() {
     },
   });
 
-  async function onSubmit(values: FormValues) {
-    setAppState("loading");
-    setResults(null);
-    
-    try {
-      const calculatedAge = convertDogAgeToHumanYears(values.age, values.size as DogSize);
-
-      // Kick off the AI fact generation
-      const factResult = await generateDogFact();
-
-      setResults({humanAge: calculatedAge, dogFact: factResult});
-      setAppState("results");
-    } catch (error) {
-      console.error("Failed to generate dog fact:", error);
+  // Show error toast when error state changes
+  useEffect(() => {
+    if (error) {
       toast({
         variant: "destructive",
         title: "Oh no! Something went wrong.",
-        description: "We couldn't fetch a fun fact right now. Please try again.",
+        description: error || "We couldn't fetch a fun fact right now. Please try again.",
       });
-      // Still show the age result if it was calculated
-      const calculatedAge = convertDogAgeToHumanYears(values.age, values.size as DogSize)
-      if (calculatedAge) {
-        setResults({ humanAge: calculatedAge, dogFact: null });
-        setAppState("results");
-      } else {
-        setAppState("form");
-      }
     }
+  }, [error, toast]);
+
+  async function onSubmit(values: FormValues) {
+    // Update store with form values
+    setDogAge(values.age);
+    setDogSize(values.size as DogSize);
+    
+    // Submit calculation through store
+    await submitCalculation();
   }
 
   function handleReset() {
     form.reset();
-    setAppState("form");
-    setResults(null);
+    reset();
   }
 
   return (
@@ -175,7 +163,7 @@ export function WoofYearsApp() {
         </div>
       )}
 
-      {appState === 'results' && results && (
+      {appState === 'results' && results && results.humanAge !== null && (
         <div className="space-y-4 animate-in fade-in-50 duration-500">
             <ResultCard humanAge={results.humanAge} dogFactReady={!!results.dogFact} />
             {results.dogFact ? <FactCard dogFact={results.dogFact} /> : <FactCardSkeleton />}
